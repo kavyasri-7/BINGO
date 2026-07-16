@@ -390,70 +390,80 @@ export default function GameRoom({ user }) {
       )}
 
       <style>{`
+        /* Overrides for header to keep it compact */
+        .header-bar {
+          margin: 10px auto !important;
+          padding: 8px 20px !important;
+        }
+
         .room-container {
           max-width: 1200px;
-          margin: 0 auto 40px auto;
-          padding: 0 24px;
+          margin: 0 auto;
+          padding: 0 20px 10px 20px;
           width: 90%;
+          height: calc(100vh - 90px);
+          display: flex;
+          flex-direction: column;
+          overflow: hidden;
         }
 
         /* Lobby styles */
         .lobby-panel {
-          max-width: 500px;
-          margin: 60px auto;
-          padding: 40px;
+          max-width: 480px;
+          margin: 30px auto;
+          padding: 30px;
           text-align: center;
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 28px;
+          gap: 20px;
         }
 
         .lobby-icon {
-          width: 60px;
-          height: 60px;
+          width: 50px;
+          height: 50px;
           color: hsl(var(--primary));
           filter: drop-shadow(0 0 12px hsla(var(--primary), 0.5));
-          margin-bottom: 8px;
+          margin-bottom: 4px;
         }
 
         .lobby-header h2 {
-          font-size: 1.6rem;
-          margin-bottom: 6px;
+          font-size: 1.4rem;
+          margin-bottom: 4px;
         }
 
         .lobby-header p {
           color: hsl(var(--text-secondary));
-          font-size: 0.9rem;
+          font-size: 0.85rem;
         }
 
         .code-box-container {
           background: rgba(0, 0, 0, 0.4);
           border: 1px solid var(--border-color);
-          border-radius: 16px;
-          padding: 16px 24px;
+          border-radius: 14px;
+          padding: 12px 20px;
           width: 100%;
         }
 
         .code-label {
-          font-size: 0.75rem;
+          font-size: 0.7rem;
           color: hsl(var(--text-muted));
           text-transform: uppercase;
           letter-spacing: 0.1em;
           display: block;
-          margin-bottom: 6px;
+          margin-bottom: 4px;
         }
 
         .code-value-row {
           display: flex;
           justify-content: center;
           align-items: center;
-          gap: 16px;
+          gap: 12px;
         }
 
         .code-text {
           font-family: var(--font-heading);
-          font-size: 2.2rem;
+          font-size: 1.8rem;
           font-weight: 800;
           letter-spacing: 0.08em;
           color: white;
@@ -463,9 +473,9 @@ export default function GameRoom({ user }) {
           background: rgba(255, 255, 255, 0.05);
           border: 1px solid rgba(255, 255, 255, 0.08);
           color: white;
-          width: 44px;
-          height: 44px;
-          border-radius: 12px;
+          width: 38px;
+          height: 38px;
+          border-radius: 10px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -486,8 +496,8 @@ export default function GameRoom({ user }) {
         .lobby-status {
           display: flex;
           align-items: center;
-          gap: 12px;
-          font-size: 0.85rem;
+          gap: 10px;
+          font-size: 0.8rem;
           color: hsl(var(--text-secondary));
         }
 
@@ -502,34 +512,42 @@ export default function GameRoom({ user }) {
         /* Gameplay layout */
         .gameplay-grid {
           display: grid;
-          grid-template-columns: 1fr 320px;
-          gap: 24px;
-          align-items: start;
+          grid-template-columns: 1fr 300px;
+          gap: 20px;
+          align-items: stretch;
+          flex: 1;
+          min-height: 0;
+          overflow: hidden;
+          height: 100%;
         }
 
         .board-section {
           display: flex;
           flex-direction: column;
-          gap: 20px;
+          gap: 12px;
+          min-height: 0;
+          overflow: hidden;
+          height: 100%;
         }
 
         .scoreboard-card {
-          padding: 20px 28px;
+          padding: 12px 24px;
           display: grid;
           grid-template-columns: 1fr auto 1fr;
           align-items: center;
-          gap: 20px;
+          gap: 16px;
           text-align: center;
+          margin-bottom: 0;
         }
 
         .player-score-block {
           display: flex;
           flex-direction: column;
-          gap: 4px;
+          gap: 2px;
         }
 
         .player-tag {
-          font-size: 0.65rem;
+          font-size: 0.6rem;
           font-weight: 800;
           letter-spacing: 0.1em;
           color: hsl(var(--text-muted));
@@ -537,7 +555,7 @@ export default function GameRoom({ user }) {
 
         .player-name {
           font-family: var(--font-heading);
-          font-size: 1.15rem;
+          font-size: 1rem;
           font-weight: 700;
           white-space: nowrap;
           overflow: hidden;
@@ -546,11 +564,11 @@ export default function GameRoom({ user }) {
 
         .vs-badge {
           background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%);
-          width: 38px;
-          height: 38px;
+          width: 32px;
+          height: 32px;
           border-radius: 50%;
           font-family: var(--font-heading);
-          font-size: 0.75rem;
+          font-size: 0.7rem;
           font-weight: 800;
           color: white;
           box-shadow: 0 0 10px hsla(var(--primary), 0.3);
@@ -559,18 +577,18 @@ export default function GameRoom({ user }) {
         .bingo-letters-container {
           display: flex;
           justify-content: center;
-          gap: 6px;
-          margin-top: 8px;
+          gap: 4px;
+          margin-top: 4px;
         }
 
         .bingo-letter-badge {
-          width: 28px;
-          height: 28px;
-          border-radius: 6px;
+          width: 24px;
+          height: 24px;
+          border-radius: 5px;
           background: rgba(255, 255, 255, 0.03);
           border: 1px solid rgba(255, 255, 255, 0.05);
           font-family: var(--font-heading);
-          font-size: 0.9rem;
+          font-size: 0.8rem;
           font-weight: 800;
           color: hsl(var(--text-muted));
           display: flex;
@@ -583,14 +601,14 @@ export default function GameRoom({ user }) {
           background: linear-gradient(135deg, hsl(var(--secondary)) 0%, hsl(var(--primary)) 100%);
           color: #05050e;
           border-color: transparent;
-          box-shadow: 0 0 12px hsla(var(--secondary), 0.5);
+          box-shadow: 0 0 8px hsla(var(--secondary), 0.5);
         }
 
         .player-opponent .letter-active {
           background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--primary)) 100%);
           color: white;
           border-color: transparent;
-          box-shadow: 0 0 12px hsla(var(--accent), 0.4);
+          box-shadow: 0 0 8px hsla(var(--accent), 0.4);
         }
 
         /* Turn banner */
@@ -601,10 +619,10 @@ export default function GameRoom({ user }) {
 
         .turn-badge {
           font-family: var(--font-heading);
-          font-size: 0.85rem;
+          font-size: 0.8rem;
           font-weight: 800;
           letter-spacing: 0.1em;
-          padding: 8px 24px;
+          padding: 6px 20px;
           border-radius: 30px;
           border: 1px solid transparent;
         }
@@ -614,7 +632,7 @@ export default function GameRoom({ user }) {
           border-color: rgba(6, 182, 212, 0.3);
           color: hsl(var(--secondary));
           animation: turnPulse 2s infinite ease-in-out;
-          box-shadow: 0 0 15px rgba(6, 182, 212, 0.1);
+          box-shadow: 0 0 10px rgba(6, 182, 212, 0.1);
         }
 
         .turn-opponent {
@@ -629,26 +647,36 @@ export default function GameRoom({ user }) {
           color: #f87171;
         }
 
-        /* Bingo board grid */
+        /* Bingo board card spacing */
         .board-card {
-          padding: 24px;
+          padding: 12px;
+          flex: 1;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 0;
+          overflow: hidden;
         }
 
         .grid-5x5 {
           display: grid;
           grid-template-columns: repeat(5, 1fr);
           grid-template-rows: repeat(5, 1fr);
-          gap: 12px;
+          gap: 8px;
+          width: 100%;
+          height: 100%;
+          max-width: min(48vh, 390px);
+          max-height: min(48vh, 390px);
           aspect-ratio: 1;
         }
 
         .grid-cell {
           background: rgba(255, 255, 255, 0.02);
           border: 1.5px solid rgba(255, 255, 255, 0.05);
-          border-radius: 16px;
+          border-radius: 12px;
           color: white;
           font-family: var(--font-heading);
-          font-size: 1.6rem;
+          font-size: 1.25rem;
           font-weight: 700;
           cursor: pointer;
           position: relative;
@@ -664,12 +692,12 @@ export default function GameRoom({ user }) {
         .grid-cell:hover:not(:disabled) {
           background: rgba(255, 255, 255, 0.08);
           border-color: hsl(var(--secondary));
-          transform: translateY(-2px) scale(1.03);
-          box-shadow: 0 5px 15px hsla(var(--secondary), 0.25);
+          transform: translateY(-1px) scale(1.02);
+          box-shadow: 0 4px 10px hsla(var(--secondary), 0.25);
         }
 
         .grid-cell:active:not(:disabled) {
-          transform: scale(0.95);
+          transform: scale(0.96);
         }
 
         .cell-disabled {
@@ -690,7 +718,7 @@ export default function GameRoom({ user }) {
         .strike-marker {
           position: absolute;
           width: 75%;
-          height: 3px;
+          height: 2px;
           background: linear-gradient(90deg, transparent, hsl(var(--primary)), transparent);
           border-radius: 2px;
           transform: rotate(-30deg);
@@ -713,20 +741,20 @@ export default function GameRoom({ user }) {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 0 6px;
+          padding: 0 4px;
         }
 
         .btn-sm {
-          padding: 8px 16px;
-          font-size: 0.85rem;
-          border-radius: 10px;
+          padding: 6px 12px;
+          font-size: 0.8rem;
+          border-radius: 8px;
         }
 
         .meta-badge {
           display: flex;
           align-items: center;
           gap: 6px;
-          font-size: 0.8rem;
+          font-size: 0.75rem;
           font-weight: 600;
         }
 
@@ -739,30 +767,33 @@ export default function GameRoom({ user }) {
           animation: pulse 1.5s infinite;
         }
 
-        /* Sidebar & Move Logs */
+        /* Sidebar & Move Logs (Flex container height constrained) */
         .sidebar-section {
           height: 100%;
+          min-height: 0;
+          overflow: hidden;
         }
 
         .sidebar-card {
-          padding: 24px;
+          padding: 16px;
           display: flex;
           flex-direction: column;
-          height: 520px;
-          max-height: 520px;
+          height: 100%;
+          max-height: 100%;
+          box-sizing: border-box;
         }
 
         .sidebar-header {
           display: flex;
           align-items: center;
-          gap: 8px;
+          gap: 6px;
           border-bottom: 1px solid var(--border-color);
-          padding-bottom: 12px;
-          margin-bottom: 16px;
+          padding-bottom: 8px;
+          margin-bottom: 12px;
         }
 
         .sidebar-header h3 {
-          font-size: 1rem;
+          font-size: 0.85rem;
           color: white;
           text-transform: uppercase;
           letter-spacing: 0.05em;
@@ -773,25 +804,26 @@ export default function GameRoom({ user }) {
           overflow-y: auto;
           display: flex;
           flex-direction: column;
-          gap: 10px;
-          padding-right: 6px;
+          gap: 8px;
+          padding-right: 4px;
+          min-height: 0;
         }
 
         .log-item {
           background: rgba(255, 255, 255, 0.02);
           border: 1px solid rgba(255, 255, 255, 0.04);
-          border-radius: 10px;
-          padding: 10px 12px;
-          font-size: 0.8rem;
+          border-radius: 8px;
+          padding: 8px 10px;
+          font-size: 0.75rem;
           display: flex;
           align-items: center;
-          gap: 8px;
-          line-height: 1.4;
+          gap: 6px;
+          line-height: 1.3;
         }
 
         .log-time {
           color: hsl(var(--text-muted));
-          font-size: 0.75rem;
+          font-size: 0.7rem;
         }
 
         .log-actor {
@@ -812,8 +844,8 @@ export default function GameRoom({ user }) {
 
         .log-number {
           background: rgba(255, 255, 255, 0.08);
-          padding: 2px 6px;
-          border-radius: 4px;
+          padding: 1px 4px;
+          border-radius: 3px;
           color: white;
         }
 
@@ -828,56 +860,58 @@ export default function GameRoom({ user }) {
         }
 
         .log-empty p {
-          font-size: 0.9rem;
+          font-size: 0.8rem;
         }
 
         .log-empty .subtext {
-          font-size: 0.75rem;
-          margin-top: 4px;
+          font-size: 0.7rem;
+          margin-top: 2px;
         }
 
         .sidebar-footer {
-          margin-top: 16px;
+          margin-top: 10px;
           border-top: 1px solid var(--border-color);
-          padding-top: 12px;
+          padding-top: 8px;
         }
 
         .turn-tip {
-          font-size: 0.75rem;
+          font-size: 0.7rem;
           color: hsl(var(--text-muted));
           text-align: center;
-          line-height: 1.4;
+          line-height: 1.3;
         }
 
         /* GameOver Modal */
         .gameover-modal {
-          max-width: 440px;
-          padding: 40px;
+          max-width: 400px;
+          padding: 30px;
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 20px;
+          gap: 16px;
         }
 
         .gameover-badge {
           background: rgba(245, 158, 11, 0.12);
           border: 1.5px solid rgba(245, 158, 11, 0.3);
           border-radius: 50%;
-          width: 76px;
-          height: 76px;
+          width: 60px;
+          height: 60px;
           display: flex;
           align-items: center;
           justify-content: center;
-          box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+          box-shadow: 0 0 15px rgba(245, 158, 11, 0.2);
         }
 
         .trophy-gold {
           color: hsl(var(--gold));
           animation: float 2.5s ease-in-out infinite;
+          width: 30px;
+          height: 30px;
         }
 
         .gameover-title {
-          font-size: 2.2rem;
+          font-size: 1.8rem;
           font-weight: 900;
           letter-spacing: 0.05em;
         }
@@ -897,37 +931,37 @@ export default function GameRoom({ user }) {
 
         .gameover-subtitle {
           color: hsl(var(--text-secondary));
-          font-size: 0.95rem;
+          font-size: 0.85rem;
         }
 
         .gameover-stats {
           display: flex;
           width: 100%;
-          gap: 16px;
-          margin: 8px 0;
+          gap: 12px;
+          margin: 4px 0;
         }
 
         .stat-box {
           flex: 1;
           background: rgba(0, 0, 0, 0.35);
           border: 1px solid var(--border-color);
-          border-radius: 14px;
-          padding: 14px;
+          border-radius: 12px;
+          padding: 10px;
           display: flex;
           flex-direction: column;
           align-items: center;
-          gap: 4px;
+          gap: 2px;
         }
 
         .stat-val {
           font-family: var(--font-heading);
-          font-size: 1.6rem;
+          font-size: 1.4rem;
           font-weight: 800;
           color: white;
         }
 
         .stat-lbl {
-          font-size: 0.7rem;
+          font-size: 0.65rem;
           text-transform: uppercase;
           letter-spacing: 0.05em;
           color: hsl(var(--text-muted));
@@ -938,8 +972,8 @@ export default function GameRoom({ user }) {
           border: 1px solid rgba(245, 158, 11, 0.2);
           border-radius: 8px;
           color: hsl(var(--gold));
-          padding: 10px 16px;
-          font-size: 0.8rem;
+          padding: 8px 12px;
+          font-size: 0.75rem;
           width: 100%;
           text-align: center;
         }
@@ -947,8 +981,8 @@ export default function GameRoom({ user }) {
         .gameover-actions {
           display: flex;
           width: 100%;
-          gap: 12px;
-          margin-top: 10px;
+          gap: 10px;
+          margin-top: 8px;
         }
 
         .gameover-actions button {
@@ -972,18 +1006,26 @@ export default function GameRoom({ user }) {
         @media (max-width: 900px) {
           .gameplay-grid {
             grid-template-columns: 1fr;
+            overflow-y: auto;
+            align-items: start;
+          }
+          
+          .room-container {
+            height: auto;
+            overflow-y: auto;
           }
           
           .sidebar-card {
-            height: 320px;
+            height: 280px;
+            max-height: 280px;
           }
         }
 
         @media (max-width: 600px) {
           .scoreboard-card {
             grid-template-columns: 1fr;
-            gap: 12px;
-            padding: 16px;
+            gap: 8px;
+            padding: 10px 16px;
           }
           
           .vs-badge {
@@ -991,26 +1033,26 @@ export default function GameRoom({ user }) {
           }
 
           .grid-cell {
-            font-size: 1.25rem;
-            border-radius: 12px;
+            font-size: 1.1rem;
+            border-radius: 10px;
           }
           
           .grid-5x5 {
-            gap: 8px;
+            gap: 6px;
           }
           
           .room-container {
-            padding: 0 12px;
+            padding: 0 10px;
             width: 95%;
           }
           
           .lobby-panel {
-            padding: 24px;
-            margin: 20px auto;
+            padding: 20px;
+            margin: 15px auto;
           }
           
           .code-text {
-            font-size: 1.8rem;
+            font-size: 1.6rem;
           }
         }
       `}</style>
