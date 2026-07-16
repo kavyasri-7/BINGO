@@ -16,14 +16,14 @@ export function getFirebaseConfig() {
     }
   }
 
-  // Fallback to import.meta.env
+  // Fallback to import.meta.env or hardcoded defaults
   const envConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-    appId: import.meta.env.VITE_FIREBASE_APP_ID,
+    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBoXS3jXEeuuFjMLHM8jHZX0zxH86QCSzA",
+    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "bitlabs-6e41f.firebaseapp.com",
+    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "bitlabs-6e41f",
+    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "bitlabs-6e41f.firebasestorage.app",
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "234543492061",
+    appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:234543492061:web:fd0dd8887a41c65779a434",
   };
 
   if (envConfig.apiKey && envConfig.projectId) {
