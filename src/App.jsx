@@ -31,22 +31,22 @@ export default function App() {
 
   return (
     <BrowserRouter>
-      <div className="app-container">
+      <div className="app-container" style={{ height: '100vh' }}>
         <Header />
-        
+
         <main className="main-content">
           <Routes>
-            <Route 
-              path="/" 
-              element={<Home user={user} updateUsername={updateUsername} />} 
+            <Route
+              path="/"
+              element={<Home user={user} updateUsername={updateUsername} />}
             />
-            <Route 
-              path="/room/:roomCode" 
-              element={<GameRoom user={user} />} 
+            <Route
+              path="/room/:roomCode"
+              element={<GameRoom user={user} />}
             />
-            <Route 
-              path="*" 
-              element={<Navigate to="/" replace />} 
+            <Route
+              path="*"
+              element={<Navigate to="/" replace />}
             />
           </Routes>
         </main>
