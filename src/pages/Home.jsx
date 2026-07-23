@@ -1,12 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Play, PlusCircle, ArrowRight, User, AlertCircle, Copy } from 'lucide-react';
+import { PlusCircle, ArrowRight, User, AlertCircle, Grid, Users } from 'lucide-react';
 import { gameDb } from '../services/db';
 
 export default function Home({ user, updateUsername }) {
   const navigate = useNavigate();
   const [nameInput, setNameInput] = useState(user?.name || '');
   const [roomCodeInput, setRoomCodeInput] = useState('');
+  
+  // Host Configuration State
+  const [selectedBoardSize, setSelectedBoardSize] = useState(5);
+  const [selectedMaxPlayers, setSelectedMaxPlayers] = useState(2);
+  
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(null);
 
@@ -16,7 +21,7 @@ export default function Home({ user, updateUsername }) {
   };
 
   const handleNameChange = (e) => {
-    const val = e.target.value.substring(0, 15); // Limit name to 15 chars
+    const val = e.target.value.substring(0, 15);
     setNameInput(val);
     updateUsername(val);
   };
@@ -25,11 +30,12 @@ export default function Home({ user, updateUsername }) {
     const displayName = nameInput.trim() || user?.name || 'Player';
     setLoading(true);
     try {
-      const code = await gameDb.createRoom(displayName, user.uid);
-      triggerToast('Room created! Redirecting...', 'success');
-      setTimeout(() => {
-        navigate(`/room/${code}`);
-      }, 8000);
+      const code = await gameDb.createRoom(displayName, user.uid, {
+        boardSize: selectedBoardSize,
+        maxPlayers: selectedMaxPlayers,
+      });
+      triggerToast('Room created! Entering lobby...', 'success');
+      navigate(`/room/${code}`);
     } catch (err) {
       console.error(err);
       triggerToast(err.message || 'Failed to create game room.');
@@ -52,19 +58,22 @@ export default function Home({ user, updateUsername }) {
       return;
     }
 
-    setLoading(false);
     setLoading(true);
 
     try {
       await gameDb.joinRoom(code, displayName, user.uid);
-      triggerToast('Joined room! Loading board...', 'success');
+      triggerToast('Joined room! Entering lobby...', 'success');
       navigate(`/room/${code}`);
     } catch (err) {
       console.error(err);
+      // Requirement 6: Display exact error if full
       triggerToast(err.message || 'Room not found or room is full.');
       setLoading(false);
     }
   };
+
+  const BOARD_SIZES = [5, 6, 7, 8, 9, 10];
+  const PLAYER_LIMITS = [2, 3, 4, 5, 6, 8, 10];
 
   return (
     <div className="home-container">
@@ -86,11 +95,11 @@ export default function Home({ user, updateUsername }) {
 
       <div className="hero-section">
         <h2 className="hero-title">
-          MULTIPLAYER BINGO <br />
-          <span className="glow-text">IN REAL TIME</span>
+          REAL-TIME MULTIPLAYER <br />
+          <span className="glow-text">DYNAMIC BINGO</span>
         </h2>
         <p className="hero-subtitle">
-          Create a private battlefield, share the invite key, and challenge your friends in real-time.
+          Configure dynamic board dimensions, set player limits, share the room code, and compete in real-time.
         </p>
       </div>
 
@@ -112,7 +121,7 @@ export default function Home({ user, updateUsername }) {
             />
           </div>
           <p className="profile-tip">
-            This name will be visible to your opponent on the scoreboard.
+            This name will be visible to all players in the game room and live leaderboard.
           </p>
         </div>
 
@@ -121,15 +130,59 @@ export default function Home({ user, updateUsername }) {
           {/* Create Card */}
           <div className="glass-panel action-card create-card">
             <div className="card-content">
-              <h3>Host a Game</h3>
-              <p>Spin up a new lobby and get a 6-digit room code to invite your opponent.</p>
+              <h3>Host a New Game</h3>
+              <p>Customize your game rules before creating the lobby.</p>
+
+              {/* Host Settings Selectors */}
+              <div className="host-options-block">
+                {/* Board Size Selector */}
+                <div className="option-group">
+                  <label className="option-label">
+                    <Grid size={14} className="icon-accent" />
+                    <span>Board Size: {selectedBoardSize} × {selectedBoardSize}</span>
+                  </label>
+                  <div className="pill-selector">
+                    {BOARD_SIZES.map((sz) => (
+                      <button
+                        key={sz}
+                        type="button"
+                        className={`pill-btn ${selectedBoardSize === sz ? 'pill-active' : ''}`}
+                        onClick={() => setSelectedBoardSize(sz)}
+                      >
+                        {sz}×{sz}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Max Players Selector */}
+                <div className="option-group">
+                  <label className="option-label">
+                    <Users size={14} className="icon-secondary" />
+                    <span>Max Players: {selectedMaxPlayers} Players</span>
+                  </label>
+                  <div className="pill-selector">
+                    {PLAYER_LIMITS.map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        className={`pill-btn ${selectedMaxPlayers === num ? 'pill-active' : ''}`}
+                        onClick={() => setSelectedMaxPlayers(num)}
+                      >
+                        {num}P
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <button 
-                className="btn btn-primary btn-full"
+                className="btn btn-primary btn-full mt-16"
                 onClick={handleCreateGame}
                 disabled={loading}
               >
                 <PlusCircle size={20} />
-                Create Game Room
+                Create Game Room ({selectedBoardSize}×{selectedBoardSize}, {selectedMaxPlayers}P)
               </button>
             </div>
           </div>
@@ -137,8 +190,8 @@ export default function Home({ user, updateUsername }) {
           {/* Join Card */}
           <div className="glass-panel action-card join-card">
             <form onSubmit={handleJoinGame} className="card-content">
-              <h3>Join a Game</h3>
-              <p>Enter the 6-character room code from your friend to jump directly into battle.</p>
+              <h3>Join Existing Game</h3>
+              <p>Enter the 6-character room code from your host to enter the lobby.</p>
               <div className="join-form-row">
                 <input
                   type="text"
@@ -163,12 +216,12 @@ export default function Home({ user, updateUsername }) {
 
       <style>{`
         .home-container {
-          max-width: 900px;
-          margin: 40px auto;
+          max-width: 960px;
+          margin: 30px auto;
           padding: 0 20px;
           display: flex;
           flex-direction: column;
-          gap: 40px;
+          gap: 32px;
         }
 
         .hero-section {
@@ -178,7 +231,7 @@ export default function Home({ user, updateUsername }) {
         .hero-title {
           font-size: 2.8rem;
           line-height: 1.15;
-          font-weight: 800;
+          font-weight: 900;
           letter-spacing: -0.03em;
           margin-bottom: 12px;
         }
@@ -191,20 +244,21 @@ export default function Home({ user, updateUsername }) {
         }
 
         .hero-subtitle {
-          font-size: 1.1rem;
+          font-size: 1.05rem;
           color: hsl(var(--text-secondary));
-          max-width: 600px;
+          max-width: 640px;
           margin: 0 auto;
         }
 
         .home-grid {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: 1fr 1.1fr;
           gap: 24px;
+          align-items: start;
         }
 
         .profile-card {
-          padding: 32px;
+          padding: 28px;
           display: flex;
           flex-direction: column;
           justify-content: center;
@@ -214,7 +268,7 @@ export default function Home({ user, updateUsername }) {
           display: flex;
           align-items: center;
           gap: 12px;
-          margin-bottom: 24px;
+          margin-bottom: 20px;
         }
 
         .card-header h3 {
@@ -236,7 +290,7 @@ export default function Home({ user, updateUsername }) {
         .action-cards-container {
           display: flex;
           flex-direction: column;
-          gap: 24px;
+          gap: 20px;
         }
 
         .action-card {
@@ -250,10 +304,75 @@ export default function Home({ user, updateUsername }) {
         }
 
         .action-card p {
-          font-size: 0.88rem;
+          font-size: 0.85rem;
           color: hsl(var(--text-secondary));
-          margin-bottom: 16px;
+          margin-bottom: 14px;
           line-height: 1.4;
+        }
+
+        .host-options-block {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          margin-bottom: 16px;
+          background: rgba(0, 0, 0, 0.25);
+          border: 1px solid rgba(255, 255, 255, 0.05);
+          border-radius: 12px;
+          padding: 12px;
+        }
+
+        .option-group {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .option-label {
+          font-size: 0.72rem;
+          font-weight: 700;
+          letter-spacing: 0.06em;
+          color: hsl(var(--text-secondary));
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          text-transform: uppercase;
+        }
+
+        .pill-selector {
+          display: flex;
+          gap: 6px;
+          flex-wrap: wrap;
+        }
+
+        .pill-btn {
+          flex: 1;
+          min-width: 44px;
+          background: rgba(255, 255, 255, 0.03);
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 8px;
+          color: hsl(var(--text-muted));
+          font-family: var(--font-heading);
+          font-size: 0.78rem;
+          font-weight: 700;
+          padding: 6px 8px;
+          cursor: pointer;
+          transition: var(--transition-smooth);
+        }
+
+        .pill-btn:hover {
+          background: rgba(255, 255, 255, 0.08);
+          color: white;
+        }
+
+        .pill-active {
+          background: linear-gradient(135deg, hsl(var(--secondary)) 0%, hsl(var(--primary)) 100%) !important;
+          border-color: transparent !important;
+          color: #05050e !important;
+          box-shadow: 0 0 10px hsla(var(--secondary), 0.4);
+        }
+
+        .mt-16 {
+          margin-top: 16px;
         }
 
         .btn-full {
@@ -281,14 +400,13 @@ export default function Home({ user, updateUsername }) {
           border-radius: 12px;
         }
 
-        /* Loading Screen overlay */
         .loading-overlay {
           position: fixed;
           top: 0;
           left: 0;
           width: 100%;
           height: 100%;
-          background: rgba(4, 3, 8, 0.8);
+          background: rgba(4, 3, 8, 0.85);
           backdrop-filter: blur(10px);
           display: flex;
           flex-direction: column;
@@ -306,10 +424,7 @@ export default function Home({ user, updateUsername }) {
             grid-template-columns: 1fr;
           }
           .hero-title {
-            font-size: 2.2rem;
-          }
-          .profile-card {
-            padding: 24px;
+            font-size: 2.1rem;
           }
         }
       `}</style>

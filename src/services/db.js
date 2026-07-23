@@ -5,7 +5,6 @@ import {
   updateDoc,
   onSnapshot,
   deleteDoc,
-  serverTimestamp
 } from 'firebase/firestore';
 import { db, isRealFirebase } from '../firebase/config';
 import { generateBoard, checkBingo } from '../utils/bingoEngine';
@@ -70,23 +69,90 @@ function broadcastUpdate(roomCode, data) {
   }
 }
 
+// Helper to normalize legacy room objects (for backwards compatibility if any exist in storage)
+function normalizeRoomData(room) {
+  if (!room) return null;
+  
+  const boardSize = Number(room.boardSize) || 5;
+  const maxPlayers = Number(room.maxPlayers) || 2;
+  
+  let playersList = [];
+  if (Array.isArray(room.players)) {
+    playersList = room.players;
+  } else if (room.players && typeof room.players === 'object') {
+    if (room.players.player1) {
+      playersList.push({
+        uid: room.players.player1.uid,
+        name: room.players.player1.name,
+        board: room.players.player1.board || generateBoard(boardSize),
+        isReady: true,
+        joinedAt: Date.now() - 1000,
+      });
+    }
+    if (room.players.player2) {
+      playersList.push({
+        uid: room.players.player2.uid,
+        name: room.players.player2.name,
+        board: room.players.player2.board || generateBoard(boardSize),
+        isReady: true,
+        joinedAt: Date.now(),
+      });
+    }
+  }
+
+  const hostId = room.hostId || (playersList[0] ? playersList[0].uid : null);
+  const hostName = room.hostName || (playersList[0] ? playersList[0].name : 'Host');
+
+  const completedLinesMap = room.completedLines || {};
+  if (room.player1CompletedLines !== undefined && playersList[0]) {
+    completedLinesMap[playersList[0].uid] = room.player1CompletedLines;
+  }
+  if (room.player2CompletedLines !== undefined && playersList[1]) {
+    completedLinesMap[playersList[1].uid] = room.player2CompletedLines;
+  }
+
+  return {
+    ...room,
+    boardSize,
+    maxPlayers,
+    hostId,
+    hostName,
+    players: playersList,
+    completedLines: completedLinesMap,
+    turnIndex: typeof room.turnIndex === 'number' ? room.turnIndex : 0,
+    crossedNumbers: room.crossedNumbers || [],
+    moveHistory: room.moveHistory || [],
+  };
+}
+
 // Mock implementation of db operations
 const mockDb = {
-  createRoom: async (playerName, playerUid) => {
+  createRoom: async (playerName, playerUid, options = {}) => {
+    const boardSize = Number(options.boardSize) || 5;
+    const maxPlayers = Number(options.maxPlayers) || 2;
     const roomCode = generateRoomCode();
     const mockDatabase = getMockDB();
 
+    const hostPlayer = {
+      uid: playerUid,
+      name: playerName,
+      board: generateBoard(boardSize),
+      isReady: true,
+      joinedAt: Date.now(),
+    };
+
     const newRoom = {
       roomCode,
+      hostId: playerUid,
+      hostName: playerName,
+      boardSize,
+      maxPlayers,
       gameStatus: 'waiting',
-      players: {
-        player1: { uid: playerUid, name: playerName, board: generateBoard() },
-        player2: null,
-      },
+      players: [hostPlayer],
+      completedLines: { [playerUid]: 0 },
       crossedNumbers: [],
       currentTurn: playerUid,
-      player1CompletedLines: 0,
-      player2CompletedLines: 0,
+      turnIndex: 0,
       winner: null,
       moveHistory: [],
       createdAt: Date.now(),
@@ -99,65 +165,109 @@ const mockDb = {
   },
 
   joinRoom: async (roomCode, playerName, playerUid) => {
+    const code = roomCode.toUpperCase();
     const mockDatabase = getMockDB();
-    const room = mockDatabase[roomCode];
+    let room = normalizeRoomData(mockDatabase[code]);
 
     if (!room) {
       throw new Error('Room not found');
     }
-    if (room.players.player2 && room.players.player2.uid !== playerUid && room.players.player1.uid !== playerUid) {
-      throw new Error('Room is full');
-    }
 
-    // If player is already player1, let them stay as player1
-    if (room.players.player1.uid === playerUid) {
+    const existingIndex = room.players.findIndex(p => p.uid === playerUid);
+    if (existingIndex !== -1) {
+      // Player is already in room, update name if needed
+      room.players[existingIndex].name = playerName;
+      mockDatabase[code] = room;
+      saveMockDB(mockDatabase);
+      broadcastUpdate(code, room);
       return room;
     }
 
-    // If player is already player2, return room
-    if (room.players.player2 && room.players.player2.uid === playerUid) {
-      return room;
+    // Check if room has reached maximum players
+    if (room.players.length >= room.maxPlayers) {
+      throw new Error('This room has reached its maximum number of players.');
     }
 
-    // Set player 2 and set status to playing
-    room.players.player2 = {
+    // Add new player
+    const newPlayer = {
       uid: playerUid,
       name: playerName,
-      board: generateBoard(),
+      board: generateBoard(room.boardSize),
+      isReady: false,
+      joinedAt: Date.now(),
     };
-    room.gameStatus = 'playing';
 
-    mockDatabase[roomCode] = room;
+    room.players.push(newPlayer);
+    room.completedLines[playerUid] = 0;
+
+    mockDatabase[code] = room;
     saveMockDB(mockDatabase);
-    broadcastUpdate(roomCode, room);
+    broadcastUpdate(code, room);
+    return room;
+  },
+
+  toggleReady: async (roomCode, playerUid, isReady) => {
+    const code = roomCode.toUpperCase();
+    const mockDatabase = getMockDB();
+    const room = normalizeRoomData(mockDatabase[code]);
+
+    if (!room) throw new Error('Room not found');
+
+    const player = room.players.find(p => p.uid === playerUid);
+    if (player) {
+      player.isReady = typeof isReady === 'boolean' ? isReady : !player.isReady;
+      mockDatabase[code] = room;
+      saveMockDB(mockDatabase);
+      broadcastUpdate(code, room);
+    }
+    return room;
+  },
+
+  startGame: async (roomCode, hostUid) => {
+    const code = roomCode.toUpperCase();
+    const mockDatabase = getMockDB();
+    const room = normalizeRoomData(mockDatabase[code]);
+
+    if (!room) throw new Error('Room not found');
+    if (room.hostId !== hostUid) throw new Error('Only the host can start the game');
+    if (room.players.length < 2) throw new Error('Need at least 2 players to start');
+
+    room.gameStatus = 'playing';
+    room.currentTurn = room.players[0].uid;
+    room.turnIndex = 0;
+
+    mockDatabase[code] = room;
+    saveMockDB(mockDatabase);
+    broadcastUpdate(code, room);
     return room;
   },
 
   subscribeToRoom: (roomCode, callback) => {
+    const code = roomCode.toUpperCase();
+
     // Return initial value in microtask
     setTimeout(() => {
       const mockDatabase = getMockDB();
-      const room = mockDatabase[roomCode];
+      const room = normalizeRoomData(mockDatabase[code]);
       if (room) {
         callback(room);
       }
     }, 0);
 
-    registerCallback(roomCode, callback);
+    registerCallback(code, callback);
 
     const handleMessage = (event) => {
-      if (event.data && event.data.type === 'ROOM_UPDATE' && event.data.roomCode === roomCode) {
-        callback(event.data.data);
+      if (event.data && event.data.type === 'ROOM_UPDATE' && event.data.roomCode === code) {
+        callback(normalizeRoomData(event.data.data));
       }
     };
 
     bc.addEventListener('message', handleMessage);
 
-    // Also listen to storage events in case tabs are on different processes/domains
     const handleStorage = (event) => {
       if (event.key === MOCK_DB_KEY) {
         const mockDatabase = getMockDB();
-        const room = mockDatabase[roomCode];
+        const room = normalizeRoomData(mockDatabase[code]);
         if (room) {
           callback(room);
         }
@@ -166,54 +276,47 @@ const mockDb = {
     window.addEventListener('storage', handleStorage);
 
     return () => {
-      unregisterCallback(roomCode, callback);
+      unregisterCallback(code, callback);
       bc.removeEventListener('message', handleMessage);
       window.removeEventListener('storage', handleStorage);
     };
   },
 
   makeMove: async (roomCode, number, playerUid, playerName) => {
+    const code = roomCode.toUpperCase();
     const mockDatabase = getMockDB();
-    const room = mockDatabase[roomCode];
+    const room = normalizeRoomData(mockDatabase[code]);
 
     if (!room) throw new Error('Room not found');
     if (room.gameStatus !== 'playing') throw new Error('Game is not active');
     if (room.currentTurn !== playerUid) throw new Error('Not your turn');
-    if (room.crossedNumbers.includes(number)) return room; // Already clicked
+    if (room.crossedNumbers.includes(number)) return room;
 
     room.crossedNumbers.push(number);
 
-    // Calculate completed lines
-    const p1Result = checkBingo(room.players.player1.board, room.crossedNumbers);
-    const p2Result = checkBingo(room.players.player2.board, room.crossedNumbers);
+    // Calculate completed lines for all players
+    const winners = [];
+    room.players.forEach(player => {
+      const result = checkBingo(player.board, room.crossedNumbers, room.boardSize);
+      room.completedLines[player.uid] = result.count;
+      if (result.isBingo) {
+        winners.push(player);
+      }
+    });
 
-    room.player1CompletedLines = p1Result.count;
-    room.player2CompletedLines = p2Result.count;
-
-    // Check winner
-    let p1Wins = p1Result.count >= 5;
-    let p2Wins = p2Result.count >= 5;
-
-    if (p1Wins && p2Wins) {
-      // If both completed 5 lines on the same turn, whoever made the move wins
-      room.winner = playerUid;
+    if (winners.length > 0) {
+      // If player who made the move is among winners, they win; otherwise first winner
+      const moveMakerWinner = winners.find(w => w.uid === playerUid);
+      room.winner = moveMakerWinner ? moveMakerWinner.uid : winners[0].uid;
       room.gameStatus = 'gameover';
-    } else if (p1Wins) {
-      room.winner = room.players.player1.uid;
-      room.gameStatus = 'gameover';
-    } else if (p2Wins) {
-      room.winner = room.players.player2.uid;
-      room.gameStatus = 'gameover';
+    } else {
+      // Advance turn to next player in array
+      const currentIdx = room.players.findIndex(p => p.uid === playerUid);
+      const nextIdx = (currentIdx + 1) % room.players.length;
+      room.turnIndex = nextIdx;
+      room.currentTurn = room.players[nextIdx].uid;
     }
 
-    // Toggle turn
-    const nextTurn = playerUid === room.players.player1.uid 
-      ? room.players.player2.uid 
-      : room.players.player1.uid;
-    
-    room.currentTurn = nextTurn;
-
-    // Move history
     room.moveHistory.push({
       number,
       playerUid,
@@ -221,72 +324,74 @@ const mockDb = {
       timestamp: Date.now(),
     });
 
-    mockDatabase[roomCode] = room;
+    mockDatabase[code] = room;
     saveMockDB(mockDatabase);
-    broadcastUpdate(roomCode, room);
+    broadcastUpdate(code, room);
     return room;
   },
 
   restartRoom: async (roomCode) => {
+    const code = roomCode.toUpperCase();
     const mockDatabase = getMockDB();
-    const room = mockDatabase[roomCode];
+    const room = normalizeRoomData(mockDatabase[code]);
 
     if (!room) throw new Error('Room not found');
 
     room.crossedNumbers = [];
-    room.player1CompletedLines = 0;
-    room.player2CompletedLines = 0;
     room.winner = null;
     room.moveHistory = [];
-    room.players.player1.board = generateBoard();
-    if (room.players.player2) {
-      room.players.player2.board = generateBoard();
-      room.gameStatus = 'playing';
-    } else {
-      room.gameStatus = 'waiting';
-    }
-    // Randomize starting turn
-    room.currentTurn = Math.random() < 0.5 
-      ? room.players.player1.uid 
-      : (room.players.player2 ? room.players.player2.uid : room.players.player1.uid);
+    
+    // Regenerate boards for all players
+    room.players.forEach(p => {
+      p.board = generateBoard(room.boardSize);
+      room.completedLines[p.uid] = 0;
+    });
 
-    mockDatabase[roomCode] = room;
+    room.gameStatus = room.players.length >= 2 ? 'playing' : 'waiting';
+    room.turnIndex = Math.floor(Math.random() * room.players.length);
+    room.currentTurn = room.players[room.turnIndex] ? room.players[room.turnIndex].uid : room.hostId;
+
+    mockDatabase[code] = room;
     saveMockDB(mockDatabase);
-    broadcastUpdate(roomCode, room);
+    broadcastUpdate(code, room);
     return room;
   },
 
   leaveRoom: async (roomCode, playerUid) => {
+    const code = roomCode.toUpperCase();
     const mockDatabase = getMockDB();
-    const room = mockDatabase[roomCode];
+    const room = normalizeRoomData(mockDatabase[code]);
 
     if (!room) return;
 
-    // If P1 leaves
-    if (room.players.player1.uid === playerUid) {
-      if (room.players.player2) {
-        // Promote player 2 to player 1 and win by forfeit
-        room.winner = room.players.player2.uid;
-        room.gameStatus = 'gameover';
-        room.players.player1 = room.players.player2;
-        room.players.player2 = null;
-      } else {
-        // Delete room
-        delete mockDatabase[roomCode];
-        saveMockDB(mockDatabase);
-        broadcastUpdate(roomCode, null);
-        return;
-      }
-    } else if (room.players.player2 && room.players.player2.uid === playerUid) {
-      // Player 2 leaves, Player 1 wins by forfeit
-      room.winner = room.players.player1.uid;
-      room.gameStatus = 'gameover';
-      room.players.player2 = null;
+    room.players = room.players.filter(p => p.uid !== playerUid);
+    delete room.completedLines[playerUid];
+
+    if (room.players.length === 0) {
+      delete mockDatabase[code];
+      saveMockDB(mockDatabase);
+      broadcastUpdate(code, null);
+      return;
     }
 
-    mockDatabase[roomCode] = room;
+    // Host transfer if host leaves
+    if (room.hostId === playerUid) {
+      room.hostId = room.players[0].uid;
+      room.hostName = room.players[0].name;
+    }
+
+    if (room.players.length === 1 && room.gameStatus === 'playing') {
+      // Remaining player wins by forfeit
+      room.winner = room.players[0].uid;
+      room.gameStatus = 'gameover';
+    } else if (room.currentTurn === playerUid) {
+      room.turnIndex = 0;
+      room.currentTurn = room.players[0].uid;
+    }
+
+    mockDatabase[code] = room;
     saveMockDB(mockDatabase);
-    broadcastUpdate(roomCode, room);
+    broadcastUpdate(code, room);
   }
 };
 
@@ -294,7 +399,9 @@ const mockDb = {
 // REAL FIREBASE FIRESTORE OPERATIONS
 // ----------------------------------------------------
 const firebaseDb = {
-  createRoom: async (playerName, playerUid) => {
+  createRoom: async (playerName, playerUid, options = {}) => {
+    const boardSize = Number(options.boardSize) || 5;
+    const maxPlayers = Number(options.maxPlayers) || 2;
     let roomCode = generateRoomCode();
     let codeAvailable = false;
     let attempts = 0;
@@ -311,18 +418,27 @@ const firebaseDb = {
       }
     }
 
+    const hostPlayer = {
+      uid: playerUid,
+      name: playerName,
+      board: generateBoard(boardSize),
+      isReady: true,
+      joinedAt: Date.now(),
+    };
+
     const roomRef = doc(db, 'games', roomCode);
     const newRoom = {
       roomCode,
+      hostId: playerUid,
+      hostName: playerName,
+      boardSize,
+      maxPlayers,
       gameStatus: 'waiting',
-      players: {
-        player1: { uid: playerUid, name: playerName, board: generateBoard() },
-        player2: null,
-      },
+      players: [hostPlayer],
+      completedLines: { [playerUid]: 0 },
       crossedNumbers: [],
       currentTurn: playerUid,
-      player1CompletedLines: 0,
-      player2CompletedLines: 0,
+      turnIndex: 0,
       winner: null,
       moveHistory: [],
       createdAt: Date.now(),
@@ -333,55 +449,95 @@ const firebaseDb = {
   },
 
   joinRoom: async (roomCode, playerName, playerUid) => {
-    const roomRef = doc(db, 'games', roomCode.toUpperCase());
+    const code = roomCode.toUpperCase();
+    const roomRef = doc(db, 'games', code);
     const roomSnap = await getDoc(roomRef);
 
     if (!roomSnap.exists()) {
       throw new Error('Room not found');
     }
 
-    const room = roomSnap.data();
+    const room = normalizeRoomData(roomSnap.data());
     
     // Check if player is already in this room
-    if (room.players.player1.uid === playerUid) {
-      return room;
-    }
-    if (room.players.player2 && room.players.player2.uid === playerUid) {
+    const existingIndex = room.players.findIndex(p => p.uid === playerUid);
+    if (existingIndex !== -1) {
+      room.players[existingIndex].name = playerName;
+      await updateDoc(roomRef, { players: room.players });
       return room;
     }
 
     // Check if room is full
-    if (room.players.player2) {
-      throw new Error('Room is full');
+    if (room.players.length >= room.maxPlayers) {
+      throw new Error('This room has reached its maximum number of players.');
     }
 
-    // Add Player 2
-    const updatedPlayers = {
-      ...room.players,
-      player2: {
-        uid: playerUid,
-        name: playerName,
-        board: generateBoard()
-      }
+    // Add Player
+    const newPlayer = {
+      uid: playerUid,
+      name: playerName,
+      board: generateBoard(room.boardSize),
+      isReady: false,
+      joinedAt: Date.now(),
     };
+
+    const updatedPlayers = [...room.players, newPlayer];
+    const updatedCompletedLines = { ...room.completedLines, [playerUid]: 0 };
 
     await updateDoc(roomRef, {
       players: updatedPlayers,
-      gameStatus: 'playing'
+      completedLines: updatedCompletedLines,
     });
 
     return {
       ...room,
       players: updatedPlayers,
-      gameStatus: 'playing'
+      completedLines: updatedCompletedLines,
     };
   },
 
+  toggleReady: async (roomCode, playerUid, isReady) => {
+    const code = roomCode.toUpperCase();
+    const roomRef = doc(db, 'games', code);
+    const roomSnap = await getDoc(roomRef);
+
+    if (!roomSnap.exists()) throw new Error('Room not found');
+    const room = normalizeRoomData(roomSnap.data());
+
+    const updatedPlayers = room.players.map(p => {
+      if (p.uid === playerUid) {
+        return { ...p, isReady: typeof isReady === 'boolean' ? isReady : !p.isReady };
+      }
+      return p;
+    });
+
+    await updateDoc(roomRef, { players: updatedPlayers });
+  },
+
+  startGame: async (roomCode, hostUid) => {
+    const code = roomCode.toUpperCase();
+    const roomRef = doc(db, 'games', code);
+    const roomSnap = await getDoc(roomRef);
+
+    if (!roomSnap.exists()) throw new Error('Room not found');
+    const room = normalizeRoomData(roomSnap.data());
+
+    if (room.hostId !== hostUid) throw new Error('Only the host can start the game');
+    if (room.players.length < 2) throw new Error('Need at least 2 players to start');
+
+    await updateDoc(roomRef, {
+      gameStatus: 'playing',
+      currentTurn: room.players[0].uid,
+      turnIndex: 0,
+    });
+  },
+
   subscribeToRoom: (roomCode, callback, onError) => {
-    const roomRef = doc(db, 'games', roomCode.toUpperCase());
+    const code = roomCode.toUpperCase();
+    const roomRef = doc(db, 'games', code);
     return onSnapshot(roomRef, (snapshot) => {
       if (snapshot.exists()) {
-        callback(snapshot.data());
+        callback(normalizeRoomData(snapshot.data()));
       } else {
         // Room deleted
         callback(null);
@@ -390,42 +546,43 @@ const firebaseDb = {
   },
 
   makeMove: async (roomCode, number, playerUid, playerName) => {
-    const roomRef = doc(db, 'games', roomCode.toUpperCase());
+    const code = roomCode.toUpperCase();
+    const roomRef = doc(db, 'games', code);
     const roomSnap = await getDoc(roomRef);
 
     if (!roomSnap.exists()) throw new Error('Room not found');
     
-    const room = roomSnap.data();
+    const room = normalizeRoomData(roomSnap.data());
     if (room.gameStatus !== 'playing') throw new Error('Game is not active');
     if (room.currentTurn !== playerUid) throw new Error('Not your turn');
     if (room.crossedNumbers.includes(number)) return room;
 
     const newCrossed = [...room.crossedNumbers, number];
+    const updatedCompletedLines = { ...room.completedLines };
 
-    // Compute lines
-    const p1Result = checkBingo(room.players.player1.board, newCrossed);
-    const p2Result = checkBingo(room.players.player2.board, newCrossed);
+    const winners = [];
+    room.players.forEach(player => {
+      const result = checkBingo(player.board, newCrossed, room.boardSize);
+      updatedCompletedLines[player.uid] = result.count;
+      if (result.isBingo) {
+        winners.push(player);
+      }
+    });
 
     let winner = null;
     let status = 'playing';
+    let nextTurn = room.currentTurn;
+    let nextTurnIndex = room.turnIndex;
 
-    const p1Wins = p1Result.count >= 5;
-    const p2Wins = p2Result.count >= 5;
-
-    if (p1Wins && p2Wins) {
-      winner = playerUid;
+    if (winners.length > 0) {
+      const moveMakerWinner = winners.find(w => w.uid === playerUid);
+      winner = moveMakerWinner ? moveMakerWinner.uid : winners[0].uid;
       status = 'gameover';
-    } else if (p1Wins) {
-      winner = room.players.player1.uid;
-      status = 'gameover';
-    } else if (p2Wins) {
-      winner = room.players.player2.uid;
-      status = 'gameover';
+    } else {
+      const currentIdx = room.players.findIndex(p => p.uid === playerUid);
+      nextTurnIndex = (currentIdx + 1) % room.players.length;
+      nextTurn = room.players[nextTurnIndex].uid;
     }
-
-    const nextTurn = playerUid === room.players.player1.uid 
-      ? room.players.player2.uid 
-      : room.players.player1.uid;
 
     const newHistory = [
       ...room.moveHistory,
@@ -439,83 +596,91 @@ const firebaseDb = {
 
     await updateDoc(roomRef, {
       crossedNumbers: newCrossed,
-      player1CompletedLines: p1Result.count,
-      player2CompletedLines: p2Result.count,
+      completedLines: updatedCompletedLines,
       winner,
       gameStatus: status,
       currentTurn: nextTurn,
+      turnIndex: nextTurnIndex,
       moveHistory: newHistory
     });
   },
 
   restartRoom: async (roomCode) => {
-    const roomRef = doc(db, 'games', roomCode.toUpperCase());
+    const code = roomCode.toUpperCase();
+    const roomRef = doc(db, 'games', code);
     const roomSnap = await getDoc(roomRef);
 
     if (!roomSnap.exists()) throw new Error('Room not found');
-    const room = roomSnap.data();
+    const room = normalizeRoomData(roomSnap.data());
 
-    const startingTurn = Math.random() < 0.5 
-      ? room.players.player1.uid 
-      : (room.players.player2 ? room.players.player2.uid : room.players.player1.uid);
+    const startingTurnIndex = Math.floor(Math.random() * room.players.length);
+    const startingTurn = room.players[startingTurnIndex] ? room.players[startingTurnIndex].uid : room.hostId;
 
-    const updatedPlayers = {
-      player1: {
-        ...room.players.player1,
-        board: generateBoard()
-      },
-      player2: room.players.player2 ? {
-        ...room.players.player2,
-        board: generateBoard()
-      } : null
-    };
+    const updatedPlayers = room.players.map(p => ({
+      ...p,
+      board: generateBoard(room.boardSize),
+    }));
+
+    const resetCompletedLines = {};
+    updatedPlayers.forEach(p => { resetCompletedLines[p.uid] = 0; });
 
     await updateDoc(roomRef, {
       crossedNumbers: [],
-      player1CompletedLines: 0,
-      player2CompletedLines: 0,
+      completedLines: resetCompletedLines,
       winner: null,
       moveHistory: [],
-      gameStatus: room.players.player2 ? 'playing' : 'waiting',
+      gameStatus: updatedPlayers.length >= 2 ? 'playing' : 'waiting',
       currentTurn: startingTurn,
+      turnIndex: startingTurnIndex,
       players: updatedPlayers
     });
   },
 
   leaveRoom: async (roomCode, playerUid) => {
-    const roomRef = doc(db, 'games', roomCode.toUpperCase());
+    const code = roomCode.toUpperCase();
+    const roomRef = doc(db, 'games', code);
     const roomSnap = await getDoc(roomRef);
 
     if (!roomSnap.exists()) return;
-    const room = roomSnap.data();
+    const room = normalizeRoomData(roomSnap.data());
 
-    // If P1 leaves
-    if (room.players.player1.uid === playerUid) {
-      if (room.players.player2) {
-        // Promote player 2 to player 1 and win by forfeit
-        await updateDoc(roomRef, {
-          players: {
-            player1: room.players.player2,
-            player2: null
-          },
-          winner: room.players.player2.uid,
-          gameStatus: 'gameover'
-        });
-      } else {
-        // Delete room
-        await deleteDoc(roomRef);
-      }
-    } else if (room.players.player2 && room.players.player2.uid === playerUid) {
-      // Player 2 leaves, Player 1 wins by forfeit
-      await updateDoc(roomRef, {
-        players: {
-          player1: room.players.player1,
-          player2: null
-        },
-        winner: room.players.player1.uid,
-        gameStatus: 'gameover'
-      });
+    const remainingPlayers = room.players.filter(p => p.uid !== playerUid);
+    const updatedCompletedLines = { ...room.completedLines };
+    delete updatedCompletedLines[playerUid];
+
+    if (remainingPlayers.length === 0) {
+      await deleteDoc(roomRef);
+      return;
     }
+
+    let newHostId = room.hostId;
+    let newHostName = room.hostName;
+    if (room.hostId === playerUid) {
+      newHostId = remainingPlayers[0].uid;
+      newHostName = remainingPlayers[0].name;
+    }
+
+    let winner = room.winner;
+    let status = room.gameStatus;
+    let nextTurn = room.currentTurn;
+
+    if (remainingPlayers.length === 1 && status === 'playing') {
+      winner = remainingPlayers[0].uid;
+      status = 'gameover';
+    } else if (room.currentTurn === playerUid) {
+      nextTurn = remainingPlayers[0].uid;
+    }
+
+    await updateDoc(roomRef, {
+      hostId: newHostId,
+      hostName: newHostName,
+      players: remainingPlayers,
+      completedLines: updatedCompletedLines,
+      winner,
+      gameStatus: status,
+      currentTurn: nextTurn,
+      turnIndex: 0,
+    });
   }
 };
 

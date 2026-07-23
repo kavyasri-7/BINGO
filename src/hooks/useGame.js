@@ -7,13 +7,13 @@ export function useGame(roomCode, user) {
   const [error, setError] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('connected');
 
-  // Create room
-  const createRoom = useCallback(async (playerName) => {
+  // Create room with custom board size and max players
+  const createRoom = useCallback(async (playerName, options = {}) => {
     if (!user) return null;
     setLoading(true);
     setError(null);
     try {
-      const code = await gameDb.createRoom(playerName, user.uid);
+      const code = await gameDb.createRoom(playerName, user.uid, options);
       setLoading(false);
       return code;
     } catch (err) {
@@ -40,6 +40,28 @@ export function useGame(roomCode, user) {
       throw err;
     }
   }, [user]);
+
+  // Toggle ready status
+  const toggleReady = useCallback(async (isReady) => {
+    if (!roomCode || !user) return;
+    try {
+      await gameDb.toggleReady(roomCode, user.uid, isReady);
+    } catch (err) {
+      console.error('Error toggling ready:', err);
+      setError(err.message || 'Failed to update ready status.');
+    }
+  }, [roomCode, user]);
+
+  // Start game (Host only)
+  const startGame = useCallback(async () => {
+    if (!roomCode || !user) return;
+    try {
+      await gameDb.startGame(roomCode, user.uid);
+    } catch (err) {
+      console.error('Error starting game:', err);
+      setError(err.message || 'Failed to start game.');
+    }
+  }, [roomCode, user]);
 
   // Select number/cell
   const selectCell = useCallback(async (number) => {
@@ -123,40 +145,28 @@ export function useGame(roomCode, user) {
   }, [roomCode, user]);
 
   // Derived states
-  const players = roomData?.players || {};
-  
-  let myPlayerKey = null;
-  let opponentPlayerKey = null;
+  const playersList = Array.isArray(roomData?.players) ? roomData.players : [];
+  const me = playersList.find(p => p.uid === user?.uid) || null;
+  const isHost = roomData?.hostId === user?.uid;
+  const hostName = roomData?.hostName || (playersList[0] ? playersList[0].name : 'Host');
 
-  if (players.player1?.uid === user?.uid) {
-    myPlayerKey = 'player1';
-    opponentPlayerKey = 'player2';
-  } else if (players.player2?.uid === user?.uid) {
-    myPlayerKey = 'player2';
-    opponentPlayerKey = 'player1';
-  }
-
-  const me = myPlayerKey ? players[myPlayerKey] : null;
-  const opponent = opponentPlayerKey ? players[opponentPlayerKey] : null;
+  const boardSize = Number(roomData?.boardSize) || 5;
+  const maxPlayers = Number(roomData?.maxPlayers) || 2;
+  const targetLines = boardSize;
 
   const isMyTurn = roomData?.currentTurn === user?.uid && roomData?.gameStatus === 'playing';
-  const hasOpponentJoined = !!opponent;
-  
-  const myCompletedCount = myPlayerKey === 'player1' 
-    ? roomData?.player1CompletedLines || 0 
-    : roomData?.player2CompletedLines || 0;
+  const currentTurnPlayer = playersList.find(p => p.uid === roomData?.currentTurn) || null;
 
-  const opponentCompletedCount = myPlayerKey === 'player1' 
-    ? roomData?.player2CompletedLines || 0 
-    : roomData?.player1CompletedLines || 0;
+  const myCompletedCount = (roomData?.completedLines && me) 
+    ? (roomData.completedLines[me.uid] || 0) 
+    : 0;
 
   const isWinner = roomData?.winner === user?.uid;
   const isGameOver = roomData?.gameStatus === 'gameover';
-  const winnerName = roomData?.winner 
-    ? (roomData.winner === players.player1?.uid 
-        ? players.player1.name 
-        : players.player2?.name || 'Opponent') 
+  const winnerPlayer = roomData?.winner 
+    ? playersList.find(p => p.uid === roomData.winner) 
     : null;
+  const winnerName = winnerPlayer ? winnerPlayer.name : (roomData?.winner ? 'Player' : null);
 
   return {
     roomData,
@@ -164,17 +174,24 @@ export function useGame(roomCode, user) {
     error,
     connectionStatus,
     me,
-    opponent,
+    isHost,
+    hostName,
+    playersList,
+    boardSize,
+    maxPlayers,
+    targetLines,
     isMyTurn,
-    hasOpponentJoined,
+    currentTurnPlayer,
     myCompletedCount,
-    opponentCompletedCount,
     isWinner,
     isGameOver,
     winnerName,
+    winnerPlayer,
     actions: {
       createRoom,
       joinRoom,
+      toggleReady,
+      startGame,
       selectCell,
       restartGame,
       leaveRoom,

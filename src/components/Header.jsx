@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Settings, Info, CloudLightning, Database, X, HelpCircle } from 'lucide-react';
+import { Settings, CloudLightning, Database, X } from 'lucide-react';
 import { isRealFirebase, getFirebaseConfig } from '../firebase/config';
 
 export default function Header() {

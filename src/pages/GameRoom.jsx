@@ -1,18 +1,20 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
-  Copy, Check, LogOut, RefreshCw, Trophy, Users, 
-  History, Wifi, WifiOff, AlertCircle, ArrowLeft 
+  LogOut, RefreshCw, Trophy, 
+  History, Wifi, WifiOff, AlertCircle, ArrowLeft, Crown
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
+
 import { useGame } from '../hooks/useGame';
 import { checkBingo } from '../utils/bingoEngine';
+import WaitingRoom from '../components/WaitingRoom';
+import BingoBoard from '../components/BingoBoard';
+import ProgressBar from '../components/ProgressBar';
 
 export default function GameRoom({ user }) {
   const { roomCode } = useParams();
   const navigate = useNavigate();
-  const [copied, setCopied] = useState(false);
-  const [toast, setToast] = useState(null);
   
   // Custom game management hook
   const {
@@ -21,24 +23,22 @@ export default function GameRoom({ user }) {
     error,
     connectionStatus,
     me,
-    opponent,
+    isHost,
+    hostName,
+    playersList,
+    boardSize,
+    maxPlayers,
+    targetLines,
     isMyTurn,
-    hasOpponentJoined,
+    currentTurnPlayer,
     myCompletedCount,
-    opponentCompletedCount,
     isWinner,
     isGameOver,
     winnerName,
     actions
-  } = useGame(roomCode.toUpperCase(), user);
+  } = useGame(roomCode?.toUpperCase(), user);
 
   const historyEndRef = useRef(null);
-
-  // Trigger toast notifications
-  const triggerToast = (message, type = 'error') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3000);
-  };
 
   // Scroll to bottom of move history whenever it changes
   useEffect(() => {
@@ -47,11 +47,10 @@ export default function GameRoom({ user }) {
     }
   }, [roomData?.moveHistory]);
 
-  // Victory Confetti
+  // Victory Confetti Celebration
   useEffect(() => {
     if (isGameOver && isWinner) {
-      // Fire confetti multiple times for celebration
-      const duration = 3 * 1000;
+      const duration = 3.5 * 1000;
       const animationEnd = Date.now() + duration;
       const defaults = { startVelocity: 30, spread: 360, ticks: 60, zIndex: 1100 };
 
@@ -59,13 +58,10 @@ export default function GameRoom({ user }) {
 
       const interval = setInterval(() => {
         const timeLeft = animationEnd - Date.now();
-
         if (timeLeft <= 0) {
           return clearInterval(interval);
         }
-
         const particleCount = 50 * (timeLeft / duration);
-        // since particles fall down, start a bit higher than random
         confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.1, 0.3), y: Math.random() - 0.2 } });
         confetti({ ...defaults, particleCount, origin: { x: randomInRange(0.7, 0.9), y: Math.random() - 0.2 } });
       }, 250);
@@ -74,16 +70,8 @@ export default function GameRoom({ user }) {
     }
   }, [isGameOver, isWinner]);
 
-  // Copy Room Code
-  const handleCopyCode = () => {
-    navigator.clipboard.writeText(roomCode.toUpperCase());
-    setCopied(true);
-    triggerToast('Room code copied to clipboard!', 'success');
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   const handleLeaveRoom = async () => {
-    if (window.confirm('Are you sure you want to leave? This will end the game.')) {
+    if (window.confirm('Are you sure you want to leave?')) {
       await actions.leaveRoom();
       navigate('/');
     }
@@ -93,7 +81,7 @@ export default function GameRoom({ user }) {
     return (
       <div className="room-loading-screen flex-center">
         <div className="spinner"></div>
-        <p>SYNCHRONIZING WITH SERVER ROOM {roomCode}...</p>
+        <p>SYNCHRONIZING GAME LOBBY {roomCode?.toUpperCase()}...</p>
         <style>{`
           .room-loading-screen {
             height: 80vh;
@@ -112,7 +100,7 @@ export default function GameRoom({ user }) {
     return (
       <div className="room-error-screen flex-center">
         <AlertCircle size={48} className="error-icon" />
-        <h2>Room Error</h2>
+        <h2>Room Notification</h2>
         <p>{error || 'This game lobby is no longer active.'}</p>
         <button className="btn btn-primary" onClick={() => navigate('/')}>
           <ArrowLeft size={16} /> Return to Main Menu
@@ -134,7 +122,7 @@ export default function GameRoom({ user }) {
           }
           .room-error-screen p {
             color: hsl(var(--text-secondary));
-            max-width: 400px;
+            max-width: 440px;
           }
         `}</style>
       </div>
@@ -144,68 +132,25 @@ export default function GameRoom({ user }) {
   // Calculate my board highlights
   const myBoard = me?.board || [];
   const crossedNumbers = roomData.crossedNumbers || [];
-  const myBingo = checkBingo(myBoard, crossedNumbers);
-  const myHighlightIndices = myBingo.completedIndices;
-
-  // Bingo Letter List helper
-  const renderBingoLetters = (count) => {
-    const letters = ['B', 'I', 'N', 'G', 'O'];
-    return (
-      <div className="bingo-letters-container">
-        {letters.map((char, index) => {
-          const active = index < count;
-          return (
-            <span 
-              key={char} 
-              className={`bingo-letter-badge ${active ? 'letter-active' : ''}`}
-            >
-              {char}
-            </span>
-          );
-        })}
-      </div>
-    );
-  };
+  const myBingoResult = checkBingo(myBoard, crossedNumbers, boardSize);
+  const highlightIndices = myBingoResult.completedIndices;
 
   return (
     <div className="room-container">
-      {toast && (
-        <div className="toast-container">
-          <div className={`toast toast-${toast.type}`}>
-            <AlertCircle size={16} />
-            <span>{toast.message}</span>
-          </div>
-        </div>
-      )}
-
-      {/* LOBBY VIEW (WAITING FOR OPPONENT) */}
+      {/* LOBBY VIEW (WAITING FOR PLAYERS) */}
       {roomData.gameStatus === 'waiting' && (
-        <div className="glass-panel lobby-panel">
-          <div className="lobby-header">
-            <Users className="lobby-icon animate-pulse" />
-            <h2>Waiting for Opponent</h2>
-            <p>Send the room code to your friend to begin the matches.</p>
-          </div>
-
-          <div className="code-box-container">
-            <span className="code-label">Room Code</span>
-            <div className="code-value-row">
-              <span className="code-text">{roomCode.toUpperCase()}</span>
-              <button className="copy-btn" onClick={handleCopyCode} title="Copy code">
-                {copied ? <Check size={18} className="copy-success" /> : <Copy size={18} />}
-              </button>
-            </div>
-          </div>
-
-          <div className="lobby-status">
-            <div className="pulse-loader"></div>
-            <span>Listening for connection...</span>
-          </div>
-
-          <button className="btn btn-secondary" onClick={handleLeaveRoom}>
-            <LogOut size={16} /> Leave Room
-          </button>
-        </div>
+        <WaitingRoom
+          roomCode={roomCode}
+          boardSize={boardSize}
+          maxPlayers={maxPlayers}
+          playersList={playersList}
+          hostName={hostName}
+          isHost={isHost}
+          me={me}
+          onStartGame={actions.startGame}
+          onToggleReady={actions.toggleReady}
+          onLeaveRoom={handleLeaveRoom}
+        />
       )}
 
       {/* GAMEPLAY VIEW */}
@@ -213,23 +158,40 @@ export default function GameRoom({ user }) {
         <div className="gameplay-grid">
           {/* Main game board column */}
           <div className="board-section">
-            {/* Scoreboard / Players Header */}
+            {/* Scoreboard Header for Multi-players */}
             <div className="glass-panel scoreboard-card">
-              <div className="player-score-block player-me">
-                <span className="player-tag">YOU</span>
-                <span className="player-name">{me?.name}</span>
-                {renderBingoLetters(myCompletedCount)}
-              </div>
+              <div className="scoreboard-players-row">
+                {playersList.map((player) => {
+                  const isMe = player.uid === me?.uid;
+                  const linesCount = (roomData.completedLines && roomData.completedLines[player.uid]) || 0;
+                  const isCurrentTurn = roomData.currentTurn === player.uid;
 
-              <div className="vs-badge flex-center">VS</div>
-
-              <div className="player-score-block player-opponent">
-                <span className="player-tag">OPPONENT</span>
-                <span className="player-name">
-                  {opponent ? opponent.name : 'Leaving Room...'}
-                </span>
-                {renderBingoLetters(opponentCompletedCount)}
+                  return (
+                    <div 
+                      key={player.uid} 
+                      className={`player-score-block ${isMe ? 'player-me' : ''} ${isCurrentTurn ? 'turn-active-player' : ''}`}
+                    >
+                      <div className="player-top-line">
+                        <span className="player-tag">{isMe ? 'YOU' : 'PLAYER'}</span>
+                        {player.uid === roomData.hostId && <Crown size={10} className="icon-gold" />}
+                      </div>
+                      <span className="player-name" title={player.name}>{player.name}</span>
+                      <div className="player-lines-count">
+                        {linesCount} / {targetLines} Lines
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
+            </div>
+
+            {/* Dynamic Progress Bar for Current User */}
+            <div className="glass-panel progress-card">
+              <ProgressBar 
+                completedCount={myCompletedCount} 
+                targetLines={targetLines} 
+                label={`Your Progress (${boardSize}x${boardSize} Board)`}
+              />
             </div>
 
             {/* Turn status indicator */}
@@ -237,48 +199,35 @@ export default function GameRoom({ user }) {
               {roomData.gameStatus === 'gameover' ? (
                 <div className="turn-badge turn-ended">Game Over</div>
               ) : isMyTurn ? (
-                <div className="turn-badge turn-my">YOUR TURN</div>
+                <div className="turn-badge turn-my">YOUR TURN - SELECT A NUMBER</div>
               ) : (
-                <div className="turn-badge turn-opponent">OPPONENT'S TURN</div>
+                <div className="turn-badge turn-opponent">
+                  {currentTurnPlayer ? `${currentTurnPlayer.name.toUpperCase()}'S TURN` : "OPPONENT'S TURN"}
+                </div>
               )}
             </div>
 
             {/* Bingo Grid */}
-            <div className="glass-panel board-card">
-              <div className="grid-5x5">
-                {myBoard.map((number, index) => {
-                  const isCrossed = crossedNumbers.includes(number);
-                  const isWinning = myHighlightIndices.has(index);
-                  
-                  return (
-                    <button
-                      key={`${number}-${index}`}
-                      onClick={() => actions.selectCell(number)}
-                      disabled={!isMyTurn || isCrossed || roomData.gameStatus !== 'playing'}
-                      className={`grid-cell 
-                        ${isCrossed ? 'cell-crossed' : ''} 
-                        ${isWinning ? 'cell-winning' : ''}
-                        ${!isMyTurn && !isCrossed ? 'cell-disabled' : ''}
-                      `}
-                    >
-                      <span className="cell-number">{number}</span>
-                      {isCrossed && <div className="strike-marker"></div>}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <BingoBoard
+              board={myBoard}
+              boardSize={boardSize}
+              crossedNumbers={crossedNumbers}
+              highlightIndices={highlightIndices}
+              isMyTurn={isMyTurn}
+              gameStatus={roomData.gameStatus}
+              onSelectCell={actions.selectCell}
+            />
             
-            {/* Connection / Status Bar */}
+            {/* Meta Bar */}
             <div className="meta-bar">
               <button className="btn btn-secondary btn-sm" onClick={handleLeaveRoom}>
-                <LogOut size={14} /> Leave
+                <LogOut size={14} /> Leave Match
               </button>
               
               <div className="meta-right">
                 {connectionStatus === 'connected' ? (
                   <span className="meta-badge meta-connected">
-                    <Wifi size={14} /> Connected
+                    <Wifi size={14} /> Synced Realtime
                   </span>
                 ) : (
                   <span className="meta-badge meta-reconnecting">
@@ -289,7 +238,7 @@ export default function GameRoom({ user }) {
             </div>
           </div>
 
-          {/* Sidebar Panel (History & Controls) */}
+          {/* Sidebar Panel (Game Log & Controls) */}
           <div className="sidebar-section">
             <div className="glass-panel sidebar-card">
               <div className="sidebar-header">
@@ -300,7 +249,7 @@ export default function GameRoom({ user }) {
               <div className="log-list">
                 {roomData.moveHistory && roomData.moveHistory.length > 0 ? (
                   roomData.moveHistory.map((item, idx) => {
-                    const isMe = item.playerUid === user.uid;
+                    const isMe = item.playerUid === user?.uid;
                     return (
                       <div key={idx} className="log-item">
                         <span className="log-time">
@@ -318,7 +267,7 @@ export default function GameRoom({ user }) {
                 ) : (
                   <div className="log-empty">
                     <p>No moves made yet.</p>
-                    <p className="subtext">Select a number when it is your turn.</p>
+                    <p className="subtext">Numbers clicked will be struck on all boards.</p>
                   </div>
                 )}
                 <div ref={historyEndRef} />
@@ -328,8 +277,8 @@ export default function GameRoom({ user }) {
                 <div className="sidebar-footer">
                   <p className="turn-tip">
                     {isMyTurn 
-                      ? "Select any remaining number to strike it on both grids." 
-                      : "Wait for your opponent to select a number."}
+                      ? "Select any uncrossed number to mark it for all players." 
+                      : `Waiting for ${currentTurnPlayer?.name || 'opponent'} to pick a number...`}
                   </p>
                 </div>
               )}
@@ -348,32 +297,36 @@ export default function GameRoom({ user }) {
 
             <h2 className="gameover-title">
               {isWinner ? (
-                <span className="victory-text">BINGO!</span>
+                <span className="victory-text">BINGO VICTORY!</span>
               ) : (
-                <span className="defeat-text">GAME OVER</span>
+                <span className="defeat-text">MATCH ENDED</span>
               )}
             </h2>
 
             <p className="gameover-subtitle">
               {isWinner 
-                ? "You matched 5 lines and claimed the victory!" 
-                : `${winnerName || 'Your Opponent'} completed BINGO first!`}
+                ? `You completed ${targetLines} lines first and won the match!` 
+                : `${winnerName || 'Opponent'} completed ${targetLines} lines and claimed BINGO!`}
             </p>
 
             <div className="gameover-stats">
-              <div className="stat-box">
-                <span className="stat-val">{myCompletedCount}</span>
-                <span className="stat-lbl">Your Lines</span>
-              </div>
-              <div className="stat-box">
-                <span className="stat-val">{opponentCompletedCount}</span>
-                <span className="stat-lbl">Opponent Lines</span>
-              </div>
+              {playersList.map((player) => {
+                const count = (roomData.completedLines && roomData.completedLines[player.uid]) || 0;
+                const isMe = player.uid === user?.uid;
+                const isWin = player.uid === roomData.winner;
+
+                return (
+                  <div key={player.uid} className={`stat-box ${isWin ? 'stat-winner' : ''}`}>
+                    <span className="stat-val">{count} / {targetLines}</span>
+                    <span className="stat-lbl">{player.name} {isMe ? '(You)' : ''}</span>
+                  </div>
+                );
+              })}
             </div>
 
-            {!opponent && (
+            {playersList.length < 2 && (
               <div className="forfeit-notice">
-                ⚠️ Opponent left the match. Won by forfeit.
+                ⚠️ Other players left the match. Victory claimed by forfeit.
               </div>
             )}
 
@@ -381,139 +334,32 @@ export default function GameRoom({ user }) {
               <button className="btn btn-secondary" onClick={handleLeaveRoom}>
                 <LogOut size={16} /> Exit Lobby
               </button>
-              <button className="btn btn-primary" onClick={actions.restartGame}>
-                <RefreshCw size={16} /> Play Again
-              </button>
+              {isHost && (
+                <button className="btn btn-primary" onClick={actions.restartGame}>
+                  <RefreshCw size={16} /> Play Again
+                </button>
+              )}
             </div>
           </div>
         </div>
       )}
 
       <style>{`
-        /* Overrides for header to keep it compact */
-        .header-bar {
-          margin: 10px auto !important;
-          padding: 8px 20px !important;
-        }
-
         .room-container {
           max-width: 1200px;
           margin: 0 auto;
           padding: 0 20px 10px 20px;
-          width: 90%;
+          width: 92%;
           height: calc(100vh - 90px);
           display: flex;
           flex-direction: column;
           overflow: hidden;
         }
 
-        /* Lobby styles */
-        .lobby-panel {
-          max-width: 480px;
-          margin: 30px auto;
-          padding: 30px;
-          text-align: center;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 20px;
-        }
-
-        .lobby-icon {
-          width: 50px;
-          height: 50px;
-          color: hsl(var(--primary));
-          filter: drop-shadow(0 0 12px hsla(var(--primary), 0.5));
-          margin-bottom: 4px;
-        }
-
-        .lobby-header h2 {
-          font-size: 1.4rem;
-          margin-bottom: 4px;
-        }
-
-        .lobby-header p {
-          color: hsl(var(--text-secondary));
-          font-size: 0.85rem;
-        }
-
-        .code-box-container {
-          background: rgba(0, 0, 0, 0.4);
-          border: 1px solid var(--border-color);
-          border-radius: 14px;
-          padding: 12px 20px;
-          width: 100%;
-        }
-
-        .code-label {
-          font-size: 0.7rem;
-          color: hsl(var(--text-muted));
-          text-transform: uppercase;
-          letter-spacing: 0.1em;
-          display: block;
-          margin-bottom: 4px;
-        }
-
-        .code-value-row {
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          gap: 12px;
-        }
-
-        .code-text {
-          font-family: var(--font-heading);
-          font-size: 1.8rem;
-          font-weight: 800;
-          letter-spacing: 0.08em;
-          color: white;
-        }
-
-        .copy-btn {
-          background: rgba(255, 255, 255, 0.05);
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          color: white;
-          width: 38px;
-          height: 38px;
-          border-radius: 10px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          cursor: pointer;
-          transition: var(--transition-smooth);
-        }
-
-        .copy-btn:hover {
-          background: rgba(255, 255, 255, 0.12);
-          border-color: var(--card-border-hover);
-        }
-
-        .copy-success {
-          color: #10b981;
-          filter: drop-shadow(0 0 6px rgba(16, 185, 129, 0.4));
-        }
-
-        .lobby-status {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          font-size: 0.8rem;
-          color: hsl(var(--text-secondary));
-        }
-
-        .pulse-loader {
-          width: 8px;
-          height: 8px;
-          background-color: hsl(var(--secondary));
-          border-radius: 50%;
-          animation: pulseGlow 1.5s infinite;
-        }
-
-        /* Gameplay layout */
         .gameplay-grid {
           display: grid;
           grid-template-columns: 1fr 300px;
-          gap: 20px;
+          gap: 16px;
           align-items: stretch;
           flex: 1;
           min-height: 0;
@@ -524,91 +370,84 @@ export default function GameRoom({ user }) {
         .board-section {
           display: flex;
           flex-direction: column;
-          gap: 12px;
+          gap: 10px;
           min-height: 0;
           overflow: hidden;
           height: 100%;
         }
 
         .scoreboard-card {
-          padding: 12px 24px;
-          display: grid;
-          grid-template-columns: 1fr auto 1fr;
+          padding: 10px 16px;
+          overflow-x: auto;
+        }
+
+        .scoreboard-players-row {
+          display: flex;
+          gap: 10px;
+          justify-content: center;
           align-items: center;
-          gap: 16px;
-          text-align: center;
-          margin-bottom: 0;
         }
 
         .player-score-block {
+          flex: 1;
+          min-width: 100px;
+          max-width: 160px;
+          background: rgba(255, 255, 255, 0.02);
+          border: 1px solid rgba(255, 255, 255, 0.06);
+          border-radius: 10px;
+          padding: 6px 10px;
+          text-align: center;
           display: flex;
           flex-direction: column;
           gap: 2px;
+          transition: var(--transition-smooth);
+        }
+
+        .player-me {
+          background: rgba(6, 182, 212, 0.08);
+          border-color: rgba(6, 182, 212, 0.25);
+        }
+
+        .turn-active-player {
+          border-color: hsl(var(--secondary)) !important;
+          box-shadow: 0 0 10px hsla(var(--secondary), 0.3);
+        }
+
+        .player-top-line {
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          gap: 4px;
         }
 
         .player-tag {
           font-size: 0.6rem;
           font-weight: 800;
-          letter-spacing: 0.1em;
+          letter-spacing: 0.08em;
           color: hsl(var(--text-muted));
+        }
+
+        .icon-gold {
+          color: hsl(var(--gold));
         }
 
         .player-name {
           font-family: var(--font-heading);
-          font-size: 1rem;
+          font-size: 0.88rem;
           font-weight: 700;
           white-space: nowrap;
           overflow: hidden;
           text-overflow: ellipsis;
         }
 
-        .vs-badge {
-          background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 100%);
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          font-family: var(--font-heading);
-          font-size: 0.7rem;
+        .player-lines-count {
+          font-size: 0.72rem;
           font-weight: 800;
-          color: white;
-          box-shadow: 0 0 10px hsla(var(--primary), 0.3);
+          color: hsl(var(--secondary));
         }
 
-        .bingo-letters-container {
-          display: flex;
-          justify-content: center;
-          gap: 4px;
-          margin-top: 4px;
-        }
-
-        .bingo-letter-badge {
-          width: 24px;
-          height: 24px;
-          border-radius: 5px;
-          background: rgba(255, 255, 255, 0.03);
-          border: 1px solid rgba(255, 255, 255, 0.05);
-          font-family: var(--font-heading);
-          font-size: 0.8rem;
-          font-weight: 800;
-          color: hsl(var(--text-muted));
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: var(--transition-smooth);
-        }
-
-        .player-me .letter-active {
-          background: linear-gradient(135deg, hsl(var(--secondary)) 0%, hsl(var(--primary)) 100%);
-          color: #05050e;
-          border-color: transparent;
-          box-shadow: 0 0 8px hsla(var(--secondary), 0.5);
-        }
-
-        .player-opponent .letter-active {
-          background: linear-gradient(135deg, hsl(var(--accent)) 0%, hsl(var(--primary)) 100%);
-          color: white;
-          border-color: transparent;
-          box-shadow: 0 0 8px hsla(var(--accent), 0.4);
+        .progress-card {
+          padding: 10px 16px;
         }
 
         /* Turn banner */
@@ -619,20 +458,20 @@ export default function GameRoom({ user }) {
 
         .turn-badge {
           font-family: var(--font-heading);
-          font-size: 0.8rem;
+          font-size: 0.78rem;
           font-weight: 800;
-          letter-spacing: 0.1em;
-          padding: 6px 20px;
+          letter-spacing: 0.08em;
+          padding: 5px 18px;
           border-radius: 30px;
           border: 1px solid transparent;
         }
 
         .turn-my {
-          background: rgba(6, 182, 212, 0.1);
-          border-color: rgba(6, 182, 212, 0.3);
+          background: rgba(6, 182, 212, 0.12);
+          border-color: rgba(6, 182, 212, 0.35);
           color: hsl(var(--secondary));
           animation: turnPulse 2s infinite ease-in-out;
-          box-shadow: 0 0 10px rgba(6, 182, 212, 0.1);
+          box-shadow: 0 0 10px rgba(6, 182, 212, 0.15);
         }
 
         .turn-opponent {
@@ -647,96 +486,6 @@ export default function GameRoom({ user }) {
           color: #f87171;
         }
 
-        /* Bingo board card spacing */
-        .board-card {
-          padding: 12px;
-          flex: 1;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          min-height: 0;
-          overflow: hidden;
-        }
-
-        .grid-5x5 {
-          display: grid;
-          grid-template-columns: repeat(5, 1fr);
-          grid-template-rows: repeat(5, 1fr);
-          gap: 8px;
-          width: 100%;
-          height: 100%;
-          max-width: min(48vh, 390px);
-          max-height: min(48vh, 390px);
-          aspect-ratio: 1;
-        }
-
-        .grid-cell {
-          background: rgba(255, 255, 255, 0.02);
-          border: 1.5px solid rgba(255, 255, 255, 0.05);
-          border-radius: 12px;
-          color: white;
-          font-family: var(--font-heading);
-          font-size: 1.25rem;
-          font-weight: 700;
-          cursor: pointer;
-          position: relative;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: var(--transition-smooth);
-          overflow: hidden;
-          user-select: none;
-          outline: none;
-        }
-
-        .grid-cell:hover:not(:disabled) {
-          background: rgba(255, 255, 255, 0.08);
-          border-color: hsl(var(--secondary));
-          transform: translateY(-1px) scale(1.02);
-          box-shadow: 0 4px 10px hsla(var(--secondary), 0.25);
-        }
-
-        .grid-cell:active:not(:disabled) {
-          transform: scale(0.96);
-        }
-
-        .cell-disabled {
-          cursor: not-allowed;
-          opacity: 0.65;
-        }
-
-        .cell-crossed {
-          background: rgba(25, 20, 45, 0.6) !important;
-          border-color: rgba(255, 255, 255, 0.03) !important;
-          color: hsl(var(--text-muted)) !important;
-          cursor: not-allowed;
-          transform: none !important;
-          box-shadow: none !important;
-          animation: stampPop 0.45s ease-out;
-        }
-
-        .strike-marker {
-          position: absolute;
-          width: 75%;
-          height: 2px;
-          background: linear-gradient(90deg, transparent, hsl(var(--primary)), transparent);
-          border-radius: 2px;
-          transform: rotate(-30deg);
-          box-shadow: 0 0 8px hsla(var(--primary), 0.8);
-        }
-
-        .cell-winning {
-          animation: winningLinePulsate 2s infinite ease-in-out !important;
-          border-color: transparent !important;
-          color: #05050e !important;
-        }
-
-        .cell-winning .strike-marker {
-          background: #05050e;
-          box-shadow: none;
-        }
-
-        /* Meta bar (Leave & Status) */
         .meta-bar {
           display: flex;
           justify-content: space-between;
@@ -745,8 +494,8 @@ export default function GameRoom({ user }) {
         }
 
         .btn-sm {
-          padding: 6px 12px;
-          font-size: 0.8rem;
+          padding: 5px 10px;
+          font-size: 0.75rem;
           border-radius: 8px;
         }
 
@@ -767,7 +516,6 @@ export default function GameRoom({ user }) {
           animation: pulse 1.5s infinite;
         }
 
-        /* Sidebar & Move Logs (Flex container height constrained) */
         .sidebar-section {
           height: 100%;
           min-height: 0;
@@ -883,8 +631,8 @@ export default function GameRoom({ user }) {
 
         /* GameOver Modal */
         .gameover-modal {
-          max-width: 400px;
-          padding: 30px;
+          max-width: 440px;
+          padding: 28px;
           display: flex;
           flex-direction: column;
           align-items: center;
@@ -895,8 +643,8 @@ export default function GameRoom({ user }) {
           background: rgba(245, 158, 11, 0.12);
           border: 1.5px solid rgba(245, 158, 11, 0.3);
           border-radius: 50%;
-          width: 60px;
-          height: 60px;
+          width: 58px;
+          height: 58px;
           display: flex;
           align-items: center;
           justify-content: center;
@@ -911,7 +659,7 @@ export default function GameRoom({ user }) {
         }
 
         .gameover-title {
-          font-size: 1.8rem;
+          font-size: 1.7rem;
           font-weight: 900;
           letter-spacing: 0.05em;
         }
@@ -937,25 +685,32 @@ export default function GameRoom({ user }) {
         .gameover-stats {
           display: flex;
           width: 100%;
-          gap: 12px;
+          gap: 8px;
+          flex-wrap: wrap;
           margin: 4px 0;
         }
 
         .stat-box {
           flex: 1;
+          min-width: 90px;
           background: rgba(0, 0, 0, 0.35);
           border: 1px solid var(--border-color);
           border-radius: 12px;
-          padding: 10px;
+          padding: 8px;
           display: flex;
           flex-direction: column;
           align-items: center;
           gap: 2px;
         }
 
+        .stat-winner {
+          border-color: hsl(var(--gold));
+          background: rgba(245, 158, 11, 0.1);
+        }
+
         .stat-val {
           font-family: var(--font-heading);
-          font-size: 1.4rem;
+          font-size: 1.25rem;
           font-weight: 800;
           color: white;
         }
@@ -982,25 +737,11 @@ export default function GameRoom({ user }) {
           display: flex;
           width: 100%;
           gap: 10px;
-          margin-top: 8px;
+          margin-top: 6px;
         }
 
         .gameover-actions button {
           flex: 1;
-        }
-
-        /* Animations */
-        .animate-pulse {
-          animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-        }
-
-        @keyframes pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: .7; transform: scale(1.05); }
-        }
-
-        .animate-zoom {
-          animation: modalZoomIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
         }
 
         @media (max-width: 900px) {
@@ -1009,50 +750,13 @@ export default function GameRoom({ user }) {
             overflow-y: auto;
             align-items: start;
           }
-          
           .room-container {
             height: auto;
             overflow-y: auto;
           }
-          
           .sidebar-card {
-            height: 280px;
-            max-height: 280px;
-          }
-        }
-
-        @media (max-width: 600px) {
-          .scoreboard-card {
-            grid-template-columns: 1fr;
-            gap: 8px;
-            padding: 10px 16px;
-          }
-          
-          .vs-badge {
-            display: none;
-          }
-
-          .grid-cell {
-            font-size: 1.1rem;
-            border-radius: 10px;
-          }
-          
-          .grid-5x5 {
-            gap: 6px;
-          }
-          
-          .room-container {
-            padding: 0 10px;
-            width: 95%;
-          }
-          
-          .lobby-panel {
-            padding: 20px;
-            margin: 15px auto;
-          }
-          
-          .code-text {
-            font-size: 1.6rem;
+            height: 250px;
+            max-height: 250px;
           }
         }
       `}</style>
