@@ -45,10 +45,11 @@ export default function HousieRoom({ user }) {
   // Subscribe to real-time room updates
   useEffect(() => {
     const currentUserId = user?.uid || `guest_${Date.now()}`;
+    const cleanCode = (roomCode || '').trim().toUpperCase();
 
     // Join room or load room state
     housieDb
-      .joinRoom(roomCode, user?.name || 'Player', currentUserId)
+      .joinRoom(cleanCode, user?.name || 'Player', currentUserId)
       .then((roomData) => {
         setRoom(roomData);
         setLoading(false);
@@ -58,7 +59,7 @@ export default function HousieRoom({ user }) {
         setLoading(false);
       });
 
-    const unsubscribe = housieDb.subscribeToRoom(roomCode, (updatedRoom) => {
+    const unsubscribe = housieDb.subscribeToRoom(cleanCode, (updatedRoom) => {
       if (!updatedRoom) return;
       setRoom(updatedRoom);
 
@@ -114,16 +115,20 @@ export default function HousieRoom({ user }) {
     return () => clearInterval(interval);
   }, [room?.status, room?.currentCallIndex]);
 
+  const cleanRoomCode = (roomCode || '').trim().toUpperCase();
+
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(roomCode);
+    const shareUrl = `${window.location.origin}/housie/${cleanRoomCode}`;
+    navigator.clipboard.writeText(shareUrl);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    triggerToast('Room Link Copied! Send it to your friends.', 'success');
+    setTimeout(() => setCopied(false), 2500);
   };
 
   const handleStartGame = async () => {
     try {
       audioService.playGameStartSound();
-      await housieDb.startGame(roomCode, user.uid);
+      await housieDb.startGame(cleanRoomCode, user.uid);
     } catch (err) {
       triggerToast(err.message || 'Failed to start game.');
     }
