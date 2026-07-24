@@ -4,6 +4,7 @@ import { useAuth } from './hooks/useAuth';
 import Header from './components/Header';
 import Home from './pages/Home';
 import GameRoom from './pages/GameRoom';
+import HousieRoom from './pages/HousieRoom';
 
 export default function App() {
   const { user, loading, error, updateUsername } = useAuth();
@@ -43,6 +44,10 @@ export default function App() {
             <Route
               path="/room/:roomCode"
               element={<GameRoom user={user} />}
+            />
+            <Route
+              path="/housie/:roomCode"
+              element={<HousieRoom user={user} />}
             />
             <Route
               path="*"
