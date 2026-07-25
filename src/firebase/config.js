@@ -4,26 +4,38 @@ import { getAuth } from 'firebase/auth';
 
 // Helper to get configuration from environment variables or localStorage
 export function getFirebaseConfig() {
-  const localConfigStr = localStorage.getItem('firebase_config');
-  if (localConfigStr) {
-    try {
-      const parsed = JSON.parse(localConfigStr);
-      if (parsed && parsed.apiKey && parsed.projectId) {
-        return parsed;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const localConfigStr = window.localStorage.getItem('firebase_config');
+      if (localConfigStr) {
+        const parsed = JSON.parse(localConfigStr);
+        if (parsed && parsed.apiKey && parsed.projectId) {
+          return parsed;
+        }
       }
-    } catch (e) {
-      console.error('Failed to parse localStorage firebase_config', e);
     }
+  } catch (e) {
+    console.error('Failed to read localStorage firebase_config', e);
   }
 
   // Fallback to import.meta.env or hardcoded defaults
+  const getEnv = (key, fallback) => {
+    let val = null;
+    try {
+      if (typeof import.meta !== 'undefined' && import.meta && import.meta.env) {
+        val = import.meta.env[key];
+      }
+    } catch {}
+    return (val && typeof val === 'string' && val.trim().length > 0) ? val.trim() : fallback;
+  };
+
   const envConfig = {
-    apiKey: import.meta.env.VITE_FIREBASE_API_KEY || "AIzaSyBoXS3jXEeuuFjMLHM8jHZX0zxH86QCSzA",
-    authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || "bitlabs-6e41f.firebaseapp.com",
-    projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || "bitlabs-6e41f",
-    storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || "bitlabs-6e41f.firebasestorage.app",
-    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || "234543492061",
-    appId: import.meta.env.VITE_FIREBASE_APP_ID || "1:234543492061:web:fd0dd8887a41c65779a434",
+    apiKey: getEnv('VITE_FIREBASE_API_KEY', "AIzaSyBoXS3jXEeuuFjMLHM8jHZX0zxH86QCSzA"),
+    authDomain: getEnv('VITE_FIREBASE_AUTH_DOMAIN', "bitlabs-6e41f.firebaseapp.com"),
+    projectId: getEnv('VITE_FIREBASE_PROJECT_ID', "bitlabs-6e41f"),
+    storageBucket: getEnv('VITE_FIREBASE_STORAGE_BUCKET', "bitlabs-6e41f.firebasestorage.app"),
+    messagingSenderId: getEnv('VITE_FIREBASE_MESSAGING_SENDER_ID', "234543492061"),
+    appId: getEnv('VITE_FIREBASE_APP_ID', "1:234543492061:web:fd0dd8887a41c65779a434"),
   };
 
   if (envConfig.apiKey && envConfig.projectId) {
