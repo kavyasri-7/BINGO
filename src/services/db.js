@@ -74,7 +74,7 @@ function normalizeRoomData(room) {
   if (!room) return null;
   
   const boardSize = Number(room.boardSize) || 5;
-  const maxPlayers = Number(room.maxPlayers) || 2;
+  const maxPlayers = (room.maxPlayers !== undefined && room.maxPlayers !== null && room.maxPlayers !== '') ? Number(room.maxPlayers) : 2;
   
   let playersList = [];
   if (Array.isArray(room.players)) {
@@ -129,7 +129,7 @@ function normalizeRoomData(room) {
 const mockDb = {
   createRoom: async (playerName, playerUid, options = {}) => {
     const boardSize = Number(options.boardSize) || 5;
-    const maxPlayers = Number(options.maxPlayers) || 2;
+    const maxPlayers = (options.maxPlayers !== undefined && options.maxPlayers !== null && options.maxPlayers !== '') ? Number(options.maxPlayers) : 2;
     const roomCode = generateRoomCode();
     const mockDatabase = getMockDB();
 
@@ -401,7 +401,7 @@ const mockDb = {
 const firebaseDb = {
   createRoom: async (playerName, playerUid, options = {}) => {
     const boardSize = Number(options.boardSize) || 5;
-    const maxPlayers = Number(options.maxPlayers) || 2;
+    const maxPlayers = (options.maxPlayers !== undefined && options.maxPlayers !== null && options.maxPlayers !== '') ? Number(options.maxPlayers) : 2;
     let roomCode = generateRoomCode();
     let codeAvailable = false;
     let attempts = 0;

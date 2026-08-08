@@ -14,6 +14,7 @@ import { gameDb } from '../services/db';
 import { housieDb } from '../services/housieDb';
 import HousieCreateModal from '../components/HousieCreateModal';
 import HousieJoinModal from '../components/HousieJoinModal';
+import BingoCreateModal from '../components/BingoCreateModal';
 
 export default function Home({ user, updateUsername }) {
   const navigate = useNavigate();
@@ -32,8 +33,9 @@ export default function Home({ user, updateUsername }) {
   const [isHousieJoinOpen, setIsHousieJoinOpen] = useState(false);
 
   // Grid Bingo Settings
-  const [selectedBoardSize, setSelectedBoardSize] = useState(5);
-  const [selectedMaxPlayers] = useState(2);
+  const [selectedBoardSize, setSelectedBoardSize] = useState(6);
+  const [selectedMaxPlayers, setSelectedMaxPlayers] = useState(2);
+  const [isBingoCreateOpen, setIsBingoCreateOpen] = useState(false);
 
   const triggerToast = (message, type = 'error') => {
     setToast({ message, type });
@@ -75,13 +77,17 @@ export default function Home({ user, updateUsername }) {
   };
 
   // Classic Grid Bingo Handlers
-  const handleCreateBingo = async () => {
-    const displayName = nameInput.trim() || user?.name || 'Player';
+  const handleCreateBingo = async (config = {}) => {
+    const displayName = config.hostName || nameInput.trim() || user?.name || 'Player';
+    const boardSz = config.boardSize || selectedBoardSize;
+    const maxPl = config.maxPlayers !== undefined ? config.maxPlayers : selectedMaxPlayers;
+
+    setIsBingoCreateOpen(false);
     setLoading(true);
     try {
       const code = await gameDb.createRoom(displayName, user.uid, {
-        boardSize: selectedBoardSize,
-        maxPlayers: selectedMaxPlayers
+        boardSize: boardSz,
+        maxPlayers: maxPl
       });
       triggerToast('Bingo Room Created!', 'success');
       navigate(`/room/${code}`);
@@ -207,11 +213,12 @@ export default function Home({ user, updateUsername }) {
           <div className="action-card glass-card">
             <h3>Create Classic Bingo</h3>
             <div className="form-group">
-              <label>Board Size</label>
+              <label>Board Size (6x6 to 10x10)</label>
               <div className="options-grid">
-                {[5, 6, 7].map((sz) => (
+                {[5, 6, 7, 8, 9, 10].map((sz) => (
                   <button
                     key={sz}
+                    type="button"
                     className={`opt-btn ${selectedBoardSize === sz ? 'selected' : ''}`}
                     onClick={() => setSelectedBoardSize(sz)}
                   >
@@ -220,9 +227,44 @@ export default function Home({ user, updateUsername }) {
                 ))}
               </div>
             </div>
-            <button className="btn btn-primary full-width" onClick={handleCreateBingo}>
-              Create {selectedBoardSize}x{selectedBoardSize} Bingo
-            </button>
+
+            <div className="form-group">
+              <label>Host Player Limit</label>
+              <select
+                value={selectedMaxPlayers}
+                onChange={(e) => setSelectedMaxPlayers(Number(e.target.value))}
+                className="styled-select"
+                style={{
+                  width: '100%',
+                  padding: '10px 12px',
+                  background: 'rgba(0, 0, 0, 0.4)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '10px',
+                  color: 'white',
+                  fontSize: '0.9rem',
+                  outline: 'none',
+                  marginTop: '4px'
+                }}
+              >
+                <option value="2">2 Players (1v1 Duel)</option>
+                <option value="3">3 Players</option>
+                <option value="4">4 Players</option>
+                <option value="5">5 Players</option>
+                <option value="6">6 Players</option>
+                <option value="8">8 Players</option>
+                <option value="10">10 Players Party</option>
+                <option value="15">15 Players</option>
+                <option value="20">20 Players</option>
+                <option value="50">50 Players Mega</option>
+                <option value="999">Unlimited Players</option>
+              </select>
+            </div>
+
+            <div className="flex-gap" style={{ marginTop: '12px' }}>
+              <button className="btn btn-primary full-width" onClick={() => handleCreateBingo()}>
+                Create {selectedBoardSize}x{selectedBoardSize} Room ({selectedMaxPlayers > 100 ? 'Unlimited' : selectedMaxPlayers + ' Players'})
+              </button>
+            </div>
           </div>
 
           <div className="action-card glass-card">
@@ -287,6 +329,12 @@ export default function Home({ user, updateUsername }) {
         isOpen={isHousieJoinOpen}
         onClose={() => setIsHousieJoinOpen(false)}
         onJoin={handleJoinHousie}
+        user={user}
+      />
+      <BingoCreateModal
+        isOpen={isBingoCreateOpen}
+        onClose={() => setIsBingoCreateOpen(false)}
+        onCreate={handleCreateBingo}
         user={user}
       />
     </div>

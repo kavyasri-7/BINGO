@@ -83,8 +83,8 @@ export default function BingoBoard({
           gap: var(--grid-gap);
           width: 100%;
           height: 100%;
-          max-width: min(52vh, 440px);
-          max-height: min(52vh, 440px);
+          max-width: min(56vh, 480px);
+          max-height: min(56vh, 480px);
           aspect-ratio: 1;
           box-sizing: border-box;
         }
